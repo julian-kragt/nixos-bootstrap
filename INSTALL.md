@@ -50,6 +50,7 @@ nix eval --json "$bootstrap#installerData.$host" "${override[@]}"
   "users": {
     "demo": {
       "home": "/home/demo",
+      "name": "demo",
       "uid": null
     }
   }
@@ -62,6 +63,7 @@ nix eval --json "$bootstrap#installerData.$host" "${override[@]}"
 | `rootAuthorizedKeys` | the keys that can log in as root after the install. Check that yours is among them before wiping a disk |
 | `hardwareConfigPath` | where the host's hardware config goes, relative to the root of the config |
 | `disks.<name>` | the device path of a disk in the bootstrap system's disko layout, after the hardware config's definitions are merged. An install wipes these, so show them before asking for confirmation |
+| `users.<name>.name` | the user's login name, usually the same as `<name>` |
 | `users.<name>.home` | the user's home directory |
 | `users.<name>.uid` | the user's UID, or `null` if NixOS allocates it. Then it's only known on the target, once the user exists |
 
@@ -154,7 +156,7 @@ stored, who they're encrypted to, or which keys exist, and it generates no user 
   ```
 - The users, which exist on the target with their home directories:
   ```sh
-  jq -r '.users | keys[]' <<<"$data"
+  jq -r '.users[].name' <<<"$data"
   ```
 
 What the target provides:

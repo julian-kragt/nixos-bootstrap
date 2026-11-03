@@ -136,7 +136,7 @@ names the host and the field.
 | `diskoDevices` | attrset | `config.disko.devices` | partitioning and mounting; its disks' device paths are also in `installerData` as `disks` |
 | `rootAuthorizedKeys` | non-empty list of strings | root's keys in the full config, so the same keys work before and after the full deploy. If your full config gives root no keys, list the installing keys here | root's SSH keys on the bootstrap system |
 | `hardwareConfigPath` | string, relative to the root of your config; the file must exist | where your full config imports the host's hardware config from | imported into the bootstrap system; `--generate-hardware-config` writes here |
-| `users` | attrset, in the shape of `users.users` | `config.users.users` | its normal users are created on the bootstrap system with the same `uid` and `home`, and no password or keys |
+| `users` | attrset, in the shape of `users.users` | `config.users.users` | its normal users are created on the bootstrap system with the same `name`, `uid` and `home`, and no password or keys |
 
 Notes:
 
@@ -146,8 +146,9 @@ Notes:
 - `hardwareConfigPath` must point to an existing file, so a host's hardware config is generated before its first
   install (step 3). The bootstrap system imports that file without your config's `specialArgs`, modules or nixpkgs
   settings, so it can only use standard NixOS options.
-- `users` is `config.users.users` itself, not a list of names. Each entry needs `isNormalUser`, `uid` and `home`, and its
-  other options are ignored: passwords, keys and packages in it never reach the bootstrap system or `installerData`.
+- `users` is `config.users.users` itself, not a list of names. Each entry needs `isNormalUser`, `uid` and `home`; `name`
+  defaults to the attribute's name. Its other options are ignored: passwords, keys and packages in it never reach the
+  bootstrap system or `installerData`.
 
 ## 2. Check the mapper
 
@@ -295,8 +296,8 @@ What it contains:
 - systemd-boot on EFI;
 - OpenSSH with only an ed25519 host key (`/etc/ssh/ssh_host_ed25519_key`), which NixOS generates on the target on first
   boot, no passwords, root login with a key from `rootAuthorizedKeys`;
-- the normal users from `users`, with the full config's `uid` and `home`, but without a password or keys, so their
-  UIDs and home directories exist before the full config arrives;
+- the normal users from `users`, with the full config's `name`, `uid` and `home`, but without a password or keys, so
+  their UIDs and home directories exist before the full config arrives;
 - `git`, `sops`, `age`, `ssh-to-age` and `vim`, nix with the `nix-command`, `flakes` and `pipe-operators` features,
   and GitHub's SSH host key, so you can clone repositories and evaluate your config on the target.
 

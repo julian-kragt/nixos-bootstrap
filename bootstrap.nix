@@ -30,10 +30,13 @@
     }
   ];
 
-  # Installers work as root. The users exist (home, UID) before the full
-  # config, but have no password or keys: nobody logs in as them until then.
+  # Installers work as root. The normal users exist (name, home, UID) before the
+  # full config, but have no password or keys: nobody logs in as them until then.
   users.users =
-    lib.mapAttrs (_: u: u // { isNormalUser = true; }) mapper.users
+    lib.mapAttrs (_: u: {
+      inherit (u) name uid home;
+      isNormalUser = true;
+    }) (lib.filterAttrs (_: u: u.isNormalUser) mapper.users)
     // {
       root.openssh.authorizedKeys.keys = mapper.rootAuthorizedKeys;
     };

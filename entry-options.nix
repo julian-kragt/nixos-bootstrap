@@ -49,23 +49,27 @@ in
     users = mkOption {
       type = required (
         types.attrsOf (
-          types.submodule {
-            # The other NixOS user options: accepted, never forced.
-            freeformType = types.lazyAttrsOf types.raw;
-            options = {
-              isNormalUser = mkOption { type = types.bool; };
-              # null: NixOS allocates one, as in the full config.
-              uid = mkOption { type = required (types.nullOr types.ints.unsigned); };
-              home = mkOption { type = types.path; };
-            };
-          }
+          types.submodule (
+            { name, ... }:
+            {
+              # The other NixOS user options: accepted, never forced.
+              freeformType = types.lazyAttrsOf types.raw;
+              options = {
+                isNormalUser = mkOption { type = types.bool; };
+                # The attribute's name unless set, as in NixOS.
+                name = mkOption {
+                  type = types.str;
+                  default = name;
+                };
+                # null: NixOS allocates one, as in the full config.
+                uid = mkOption { type = required (types.nullOr types.ints.unsigned); };
+                home = mkOption { type = types.path; };
+              };
+            }
+          )
         )
       );
-      # Only this reaches the bootstrap system and installerData: no passwords, keys or packages.
-      apply =
-        users:
-        lib.mapAttrs (_: u: { inherit (u) uid home; }) (lib.filterAttrs (_: u: u.isNormalUser) users);
-      description = "The host's config.users.users. Its normal users are created on the bootstrap system with their uid and home, and no password or keys.";
+      description = "The host's config.users.users. Its normal users are created on the bootstrap system with their name, uid and home, and no password or keys.";
     };
   };
 }
