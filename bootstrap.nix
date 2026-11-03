@@ -1,7 +1,7 @@
 # The bootstrap system: root SSH access, the host's users and the tooling
 # installers need on the target. `mapper` is the config's bootstrap.<host>,
-# checked against mapper.nix; flake.nix adds the host's disks and hardware
-# config next to this module.
+# checked against entry-options.nix; nixos-configurations.nix adds the host's
+# disks and hardware config next to this module.
 {
   host,
   mapper,

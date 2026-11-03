@@ -38,8 +38,8 @@ your config flake                          nixos-bootstrap
 nixosConfigurations.<host>                 input `config`  =  your config flake
   (the full config)                              │
         │ evaluated                              ▼
-        ▼                                  mapper.nix: check the fields
-bootstrap.<host>  ───────────────────────▶ against its options
+        ▼                                  entries.nix: check the fields
+bootstrap.<host>  ───────────────────────▶ against entry-options.nix
   (the mapper)                                   │
                                    ┌─────────────┴──────────────┐
                                    ▼                            ▼
@@ -126,14 +126,14 @@ outputs = inputs@{ flake-parts, ... }:
 
 ### The mapper's fields
 
-Every entry has exactly these five fields, all required. They are declared as module options in `mapper.nix`, so a
-missing field, an unknown field or a value of the wrong type stops evaluation with the usual NixOS option error, which
+Every entry has exactly these five fields, all required. They are declared as module options in `entry-options.nix`, so
+a missing field, an unknown field or a value of the wrong type stops evaluation with the usual NixOS option error, which
 names the host and the field.
 
 | Field | Type | Usually | Used for |
 |---|---|---|---|
 | `system` | a Linux platform, such as `"x86_64-linux"` | `config.nixpkgs.hostPlatform.system` | `nixpkgs.hostPlatform` of the bootstrap system |
-| `diskoDevices` | attrset | `config.disko.devices` | partitioning and mounting |
+| `diskoDevices` | attrset | `config.disko.devices` | partitioning and mounting; its disks' device paths are also in `installerData` as `disks` |
 | `rootAuthorizedKeys` | non-empty list of strings | root's keys in the full config, so the same keys work before and after the full deploy. If your full config gives root no keys, list the installing keys here | root's SSH keys on the bootstrap system |
 | `hardwareConfigPath` | string, relative to the root of your config; the file must exist | where your full config imports the host's hardware config from | imported into the bootstrap system; `--generate-hardware-config` writes here |
 | `users` | attrset, in the shape of `users.users` | `config.users.users` | its normal users are created on the bootstrap system with the same `uid` and `home`, and no password or keys |
@@ -224,7 +224,7 @@ cat > "$tmp/flake.nix" <<EOF
 {
   inputs.nixos-bootstrap.url = "github:julian-kragt/nixos-bootstrap";
   inputs.nixos-bootstrap.inputs.config.url = "$config";
-  outputs = { nixos-bootstrap, ... }: { inherit (nixos-bootstrap) nixosConfigurations installerData; };
+  outputs = { nixos-bootstrap, ... }: { inherit (nixos-bootstrap) nixosConfigurations; };
 }
 EOF
 
@@ -334,8 +334,11 @@ keys of any kind.
 ### Repository layout
 
 ```
-flake.nix                         inputs (`config` is the parameter) and outputs
-mapper.nix                        the mapper's fields, as module options
+flake.nix                         inputs (`config` is the parameter), wires the files below into outputs
+entries.nix                       the config's mapper entries, checked against entry-options.nix
+entry-options.nix                 the mapper's fields, as module options
+installer-data.nix                the `installerData` output
+nixos-configurations.nix          the `nixosConfigurations` output
 bootstrap.nix                     the bootstrap system's NixOS module
 example/flake.nix                 the default `config`: one QEMU host and its mapper
 example/hardware-configuration.nix

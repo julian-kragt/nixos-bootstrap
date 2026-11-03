@@ -1,5 +1,5 @@
 # The fixed shape of `<config>#bootstrap.<host>`, as module options: every field
-# is required and any other field is an error. flake.nix evaluates each entry
+# is required and any other field is an error. entries.nix evaluates each entry
 # against these options. `root` is the config's source.
 { lib, root }:
 let

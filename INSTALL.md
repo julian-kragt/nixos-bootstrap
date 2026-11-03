@@ -39,6 +39,9 @@ nix eval --json "$bootstrap#installerData.$host" "${override[@]}"
 
 ```json
 {
+  "disks": {
+    "main": "/dev/vda"
+  },
   "hardwareConfigPath": "hardware-configuration.nix",
   "rootAuthorizedKeys": [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIReplaceWithYourOwnPublicKeyReplaceWithYourOw example"
@@ -58,22 +61,13 @@ nix eval --json "$bootstrap#installerData.$host" "${override[@]}"
 | `system` | the host's platform |
 | `rootAuthorizedKeys` | the keys that can log in as root after the install. Check that yours is among them before wiping a disk |
 | `hardwareConfigPath` | where the host's hardware config goes, relative to the root of the config |
+| `disks.<name>` | the device path of a disk in the host's disko layout. An install wipes these, so show them before asking for confirmation |
 | `users.<name>.home` | the user's home directory |
 | `users.<name>.uid` | the user's UID, or `null` if NixOS allocates it. Then it's only known on the target, once the user exists |
 
 `users` holds normal users only, and has no passwords, keys or packages. It can be empty.
 
-The disk layout isn't in `installerData`, because the evaluated layout holds functions JSON can't print. To show which
-disks an install will wipe, read them from the bootstrap system:
-
-```sh
-nix eval --json "$bootstrap#nixosConfigurations.$host.config.disko.devices.disk" "${override[@]}" \
-  --apply 'builtins.mapAttrs (_: d: d.device)'
-```
-
-```json
-{"main":"/dev/vda"}
-```
+The rest of the disk layout isn't in `installerData`, because the evaluated layout holds functions JSON can't print.
 
 ## The steps
 
@@ -119,7 +113,7 @@ cat > "$tmp/flake.nix" <<EOF
 {
   inputs.nixos-bootstrap.url = "$bootstrap";
   inputs.nixos-bootstrap.inputs.config.url = "$config";
-  outputs = { nixos-bootstrap, ... }: { inherit (nixos-bootstrap) nixosConfigurations installerData; };
+  outputs = { nixos-bootstrap, ... }: { inherit (nixos-bootstrap) nixosConfigurations; };
 }
 EOF
 
@@ -209,8 +203,7 @@ override=(--override-input config "$config")
 # 1. Check everything before touching a disk.
 nix eval --json "$bootstrap#installerData.$host" "${override[@]}" >/dev/null
 nix eval --raw "$bootstrap#nixosConfigurations.$host.config.system.build.toplevel.drvPath" "${override[@]}" >/dev/null
-disks=$(nix eval --json "$bootstrap#nixosConfigurations.$host.config.disko.devices.disk" "${override[@]}" \
-  --apply 'builtins.mapAttrs (_: d: d.device)')
+disks=$(nix eval --json "$bootstrap#installerData.$host.disks" "${override[@]}")
 
 read -r -p "Wipe $disks on $target? Type yes: " answer
 [ "$answer" = yes ] || exit 1
@@ -222,7 +215,7 @@ cat >"$tmp/flake.nix" <<EOF
 {
   inputs.nixos-bootstrap.url = "$bootstrap";
   inputs.nixos-bootstrap.inputs.config.url = "$config";
-  outputs = { nixos-bootstrap, ... }: { inherit (nixos-bootstrap) nixosConfigurations installerData; };
+  outputs = { nixos-bootstrap, ... }: { inherit (nixos-bootstrap) nixosConfigurations; };
 }
 EOF
 nix run github:nix-community/nixos-anywhere -- \
