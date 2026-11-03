@@ -120,7 +120,11 @@ cat > "$tmp/flake.nix" <<EOF
   outputs = { nixos-bootstrap, ... }: { inherit (nixos-bootstrap) nixosConfigurations; };
 }
 EOF
+```
 
+Then install with it:
+
+```sh
 nix run github:nix-community/nixos-anywhere -- \
   --flake "$tmp#$host" \
   --target-host "root@$target" \

@@ -217,20 +217,18 @@ with it.
 This wipes the disks in your disko layout.
 
 nixos-anywhere has no way to pass `--override-input` to the nix commands it runs, so give it a wrapper flake that sets the
-`config` input:
+`config` input. Set these, then run the first command of [INSTALL.md step 3](INSTALL.md#3-run-nixos-anywhere), which
+writes the wrapper to `$tmp`:
 
 ```sh
+bootstrap=github:julian-kragt/nixos-bootstrap
 config="git+file://$HOME/nixos-config"
 host=myhost
-tmp=$(mktemp -d)
-cat > "$tmp/flake.nix" <<EOF
-{
-  inputs.nixos-bootstrap.url = "github:julian-kragt/nixos-bootstrap";
-  inputs.nixos-bootstrap.inputs.config.url = "$config";
-  outputs = { nixos-bootstrap, ... }: { inherit (nixos-bootstrap) nixosConfigurations; };
-}
-EOF
+```
 
+Then install with it:
+
+```sh
 cd ~/nixos-config
 nix run github:nix-community/nixos-anywhere -- \
   --flake "$tmp#$host" \
@@ -246,7 +244,7 @@ nix run github:nix-community/nixos-anywhere -- \
   `--disk-encryption-keys /tmp/disko-password <local file holding the passphrase>`.
 - Don't run `nix flake lock` on the wrapper. nixos-anywhere evaluates it without a lock file, so every step reads
   your checkout as it is then, including the newly generated hardware config.
-- For repeatable installs, pin nixos-bootstrap: `github:julian-kragt/nixos-bootstrap/<tag or commit>`.
+- For repeatable installs, pin nixos-bootstrap: `bootstrap=github:julian-kragt/nixos-bootstrap/<tag or commit>`.
 
 After the reboot, type the LUKS passphrase at the console if the disk is encrypted. Then root can log in over SSH
 with one of `rootAuthorizedKeys`. The host has a new SSH host key, so remove an old `known_hosts` entry for its
