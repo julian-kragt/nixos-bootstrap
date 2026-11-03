@@ -1,7 +1,8 @@
 # Using nixos-bootstrap in your own installer
 
 This guide is for writing an installer, in any language, that installs NixOS hosts with nixos-bootstrap. To add
-nixos-bootstrap to a config and install a host by hand, or to see what the mapper is, start with [README.md](README.md).
+nixos-bootstrap to a config and install a host by hand, or to see what the `bootstrap` output is, start with
+[README.md](README.md).
 
 Your installer drives the install and owns everything after the first boot. nixos-bootstrap gives it:
 
@@ -10,7 +11,8 @@ Your installer drives the install and owns everything after the first boot. nixo
 - a target it can log in to as root, with the tools it needs.
 
 The installer needs no knowledge of how a config is organised. The config only has to have the
-[mapper](README.md#1-add-the-mapper). The examples are shell, but a program can run the same commands.
+[`bootstrap` output](README.md#1-add-the-bootstrap-output). The examples are shell, but a program can run the same
+commands.
 
 ## Inputs
 
@@ -75,13 +77,13 @@ The rest of the disk layout isn't in `installerData`, because the evaluated layo
 
 ### 1. Check everything before touching a disk
 
-Run these first, so a broken mapper or bootstrap system fails before anything happens to the target:
+Run these first, so a broken entry or bootstrap system fails before anything happens to the target:
 
 ```sh
 # The hosts that can be installed. Use it to validate the host, or to let the user choose.
 nix eval --json "$bootstrap#installerData" "${override[@]}" --apply builtins.attrNames
 
-# The mapper's fields and the disks an install wipes.
+# The entry's fields and the disks an install wipes.
 data=$(nix eval --json "$bootstrap#installerData.$host" "${override[@]}")
 
 # The rest of the bootstrap system and NixOS's assertions, which installerData doesn't check.

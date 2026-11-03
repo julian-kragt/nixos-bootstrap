@@ -1,7 +1,7 @@
 # nixos-bootstrap: the first, minimal NixOS system of a host, which
 # nixos-anywhere installs before the full config can be deployed.
 #
-# Everything host-specific comes from the config flake's mapper,
+# Everything host-specific comes from the host's entry in the config flake,
 # `bootstrap.<host>` (contract: README.md, checked against entry-options.nix). The
 # config is the `config` input: pass yours instead of editing this file.
 #
@@ -11,7 +11,7 @@
 #   nixosConfigurations.<host>  the bootstrap system for <host>
 #   installerData.<host>        bootstrap.<host> checked, with disks in place of diskoDevices, JSON-safe for installers
 {
-  description = "nixos-bootstrap: the first, minimal NixOS install of a host, driven by its config's mapper";
+  description = "nixos-bootstrap: the first, minimal NixOS install of a host, driven by its config's bootstrap output";
 
   inputs = {
     # The parameter: the config flake to bootstrap. Override it, never edit it.
@@ -31,18 +31,18 @@
     let
       lib = nixpkgs.lib;
       configFlake = config;
-      mappers = import ./entries.nix { inherit lib configFlake; };
+      entries = import ./entries.nix { inherit lib configFlake; };
       nixosConfigurations = import ./nixos-configurations.nix {
         inherit
           lib
           disko
           configFlake
-          mappers
+          entries
           ;
       };
     in
     {
       inherit nixosConfigurations;
-      installerData = import ./installer-data.nix { inherit lib mappers nixosConfigurations; };
+      installerData = import ./installer-data.nix { inherit lib entries nixosConfigurations; };
     };
 }

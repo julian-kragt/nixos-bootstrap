@@ -1,10 +1,10 @@
 # The bootstrap system: root SSH access, the host's users and the tooling
-# installers need on the target. `mapper` is the config's bootstrap.<host>,
+# installers need on the target. `entry` is the config's bootstrap.<host>,
 # checked against entry-options.nix; nixos-configurations.nix adds the host's
 # disks and hardware config next to this module.
 {
   host,
-  mapper,
+  entry,
   config,
   lib,
   pkgs,
@@ -12,7 +12,7 @@
 }:
 {
   # Wins over the hardware config's lib.mkDefault; a different plain value there is an error.
-  nixpkgs.hostPlatform = mapper.system;
+  nixpkgs.hostPlatform = entry.system;
 
   networking.hostName = host;
   # Nothing stateful runs here; the full config sets the host's own stateVersion.
@@ -36,9 +36,9 @@
     lib.mapAttrs (_: u: {
       inherit (u) name uid home;
       isNormalUser = true;
-    }) (lib.filterAttrs (_: u: u.isNormalUser) mapper.users)
+    }) (lib.filterAttrs (_: u: u.isNormalUser) entry.users)
     // {
-      root.openssh.authorizedKeys.keys = mapper.rootAuthorizedKeys;
+      root.openssh.authorizedKeys.keys = entry.rootAuthorizedKeys;
     };
 
   services.openssh = {

@@ -70,7 +70,7 @@
         ];
       };
 
-      # The mapper: what nixos-bootstrap needs from every host above, taken
+      # The `bootstrap` output: what nixos-bootstrap needs from every host above, taken
       # from the evaluated full config.
       bootstrap = lib.mapAttrs (
         host:

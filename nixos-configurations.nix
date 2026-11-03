@@ -4,17 +4,17 @@
   lib,
   disko,
   configFlake,
-  mappers,
+  entries,
 }:
 lib.mapAttrs (
-  host: mapper:
+  host: entry:
   lib.nixosSystem {
-    specialArgs = { inherit host mapper; };
+    specialArgs = { inherit host entry; };
     modules = [
       ./bootstrap.nix
       disko.nixosModules.disko
-      { disko.devices = mapper.diskoDevices; }
-      "${configFlake}/${mapper.hardwareConfigPath}"
+      { disko.devices = entry.diskoDevices; }
+      "${configFlake}/${entry.hardwareConfigPath}"
     ];
   }
-) mappers
+) entries
