@@ -1,9 +1,9 @@
 # The nixosConfigurations output: each host's bootstrap system, which is bootstrap.nix plus
-# the host's disks and hardware config. `root` is the config's source.
+# the host's disks and hardware config.
 {
   lib,
   disko,
-  root,
+  configFlake,
   mappers,
 }:
 lib.mapAttrs (
@@ -14,7 +14,7 @@ lib.mapAttrs (
       ./bootstrap.nix
       disko.nixosModules.disko
       { disko.devices = mapper.diskoDevices; }
-      "${root}/${mapper.hardwareConfigPath}"
+      "${configFlake}/${mapper.hardwareConfigPath}"
     ];
   }
 ) mappers

@@ -2,7 +2,7 @@
 # nixos-anywhere installs before the full config can be deployed.
 #
 # Everything host-specific comes from the config flake's mapper,
-# `bootstrap.<host>` (contract: README.md, checked by entry-options.nix). The
+# `bootstrap.<host>` (contract: README.md, checked against entry-options.nix). The
 # config is the `config` input: pass yours instead of editing this file.
 #
 #   nix eval --json .#installerData.<host> --override-input config <flake ref>
@@ -30,16 +30,19 @@
     }:
     let
       lib = nixpkgs.lib;
-      mappers = import ./entries.nix {
-        inherit lib;
-        root = config;
+      configFlake = config;
+      mappers = import ./entries.nix { inherit lib configFlake; };
+      nixosConfigurations = import ./nixos-configurations.nix {
+        inherit
+          lib
+          disko
+          configFlake
+          mappers
+          ;
       };
     in
     {
-      installerData = import ./installer-data.nix { inherit lib mappers; };
-      nixosConfigurations = import ./nixos-configurations.nix {
-        inherit lib disko mappers;
-        root = config;
-      };
+      inherit nixosConfigurations;
+      installerData = import ./installer-data.nix { inherit lib mappers nixosConfigurations; };
     };
 }

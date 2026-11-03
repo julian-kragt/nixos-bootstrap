@@ -61,7 +61,7 @@ nix eval --json "$bootstrap#installerData.$host" "${override[@]}"
 | `system` | the host's platform |
 | `rootAuthorizedKeys` | the keys that can log in as root after the install. Check that yours is among them before wiping a disk |
 | `hardwareConfigPath` | where the host's hardware config goes, relative to the root of the config |
-| `disks.<name>` | the device path of a disk in the host's disko layout. An install wipes these, so show them before asking for confirmation |
+| `disks.<name>` | the device path of a disk in the bootstrap system's disko layout, after the hardware config's definitions are merged. An install wipes these, so show them before asking for confirmation |
 | `users.<name>.home` | the user's home directory |
 | `users.<name>.uid` | the user's UID, or `null` if NixOS allocates it. Then it's only known on the target, once the user exists |
 
@@ -79,10 +79,10 @@ Run these first, so a broken mapper or bootstrap system fails before anything ha
 # The hosts that can be installed. Use it to validate the host, or to let the user choose.
 nix eval --json "$bootstrap#installerData" "${override[@]}" --apply builtins.attrNames
 
-# The mapper's fields.
+# The mapper's fields and the disks an install wipes.
 data=$(nix eval --json "$bootstrap#installerData.$host" "${override[@]}")
 
-# The disk layout, the hardware config and NixOS's assertions, which installerData doesn't check.
+# The rest of the bootstrap system and NixOS's assertions, which installerData doesn't check.
 nix eval --raw "$bootstrap#nixosConfigurations.$host.config.system.build.toplevel.drvPath" "${override[@]}"
 ```
 
@@ -201,9 +201,8 @@ bootstrap=github:julian-kragt/nixos-bootstrap
 override=(--override-input config "$config")
 
 # 1. Check everything before touching a disk.
-nix eval --json "$bootstrap#installerData.$host" "${override[@]}" >/dev/null
+disks=$(nix eval --json "$bootstrap#installerData.$host" "${override[@]}" --apply 'd: builtins.deepSeq d d.disks')
 nix eval --raw "$bootstrap#nixosConfigurations.$host.config.system.build.toplevel.drvPath" "${override[@]}" >/dev/null
-disks=$(nix eval --json "$bootstrap#installerData.$host.disks" "${override[@]}")
 
 read -r -p "Wipe $disks on $target? Type yes: " answer
 [ "$answer" = yes ] || exit 1

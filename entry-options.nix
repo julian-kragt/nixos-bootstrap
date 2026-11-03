@@ -1,7 +1,7 @@
 # The fixed shape of `<config>#bootstrap.<host>`, as module options: every field
 # is required and any other field is an error. entries.nix evaluates each entry
-# against these options. `root` is the config's source.
-{ lib, root }:
+# against these options.
+{ lib, configFlake }:
 let
   inherit (lib) mkOption types;
 
@@ -38,7 +38,7 @@ in
           p:
           !lib.hasPrefix "/" p
           && !lib.elem ".." (lib.splitString "/" p)
-          && lib.filesystem.pathIsRegularFile "${root}/${p}"
+          && lib.filesystem.pathIsRegularFile "${configFlake}/${p}"
         )
         // {
           description = "path of an existing file, relative to the config root";

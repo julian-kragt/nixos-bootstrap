@@ -283,7 +283,7 @@ ssh root@192.0.2.10 nixos-rebuild switch --flake github:you/nixos-config#myhost
 | Output | What it is |
 |---|---|
 | `nixosConfigurations.<host>` | the bootstrap system for `<host>`; this is what nixos-anywhere installs |
-| `installerData.<host>` | `bootstrap.<host>` of your config, checked, as JSON-safe data for installers ([INSTALL.md](INSTALL.md#what-you-can-read)) |
+| `installerData.<host>` | `bootstrap.<host>` of your config, checked, with `disks` in place of `diskoDevices`, as JSON-safe data for installers ([INSTALL.md](INSTALL.md#what-you-can-read)) |
 
 There is one of each for every host in your config's `bootstrap` output.
 
@@ -328,6 +328,7 @@ keys of any kind.
 | `path '…/hardware-configuration.nix' does not exist` | Your full config imports a hardware config that isn't there yet. Generate the file (step 3). |
 | `Path '…' in the repository "…" is not tracked by Git` | With `git+file://`, untracked files are invisible: `git add` the file. |
 | ``A definition for option `bootstrap.<host>.…' is not of type …`` | Wrong type. `users` takes `config.users.users` itself, not a list of names. `system` must be a Linux platform. `rootAuthorizedKeys` can't be empty. |
+| ``nixos-bootstrap: the disko layout of `<host>` has no disks.`` | `diskoDevices` defines no disks. Check that the mapper passes the host's `config.disko.devices`. |
 | `nixos-bootstrap: the disko layout must mount the EFI system partition (vfat) at /boot.` | The bootstrap system's systemd-boot installs to `/boot`. Change the layout's ESP mountpoint. |
 | An error about input `config/nixpkgs` or `config/disko` | nixos-bootstrap follows your config's `nixpkgs` and `disko` inputs: your flake needs inputs with exactly those names. |
 
