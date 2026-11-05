@@ -1,21 +1,21 @@
-# The config's bootstrap.<host> entries, each checked against entry-options.nix.
+# The config's bootstrapEntries.<host>, each checked against entry-options.nix.
 { lib, configFlake }:
 let
   entries =
-    configFlake.bootstrap
-      or (throw "nixos-bootstrap: the config flake has no `bootstrap` output (see README.md)");
+    configFlake.bootstrapEntries
+      or (throw "nixos-bootstrap: the config flake has no `bootstrapEntries` output (see README.md)");
 
   checkEntry =
     host: entry:
     (lib.evalModules {
       prefix = [
-        "bootstrap"
+        "bootstrapEntries"
         host
       ];
       modules = [
         (import ./entry-options.nix { inherit lib configFlake; })
         {
-          _file = "the config's bootstrap.${host}";
+          _file = "the config's bootstrapEntries.${host}";
           config = entry;
         }
       ];

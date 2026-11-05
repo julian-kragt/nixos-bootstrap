@@ -1,4 +1,4 @@
-# The fixed shape of `<config>#bootstrap.<host>`, as module options: every field
+# The fixed shape of `<config>#bootstrapEntries.<host>`, as module options: every field
 # is required and any other field is an error. entries.nix evaluates each entry
 # against these options.
 { lib, configFlake }:

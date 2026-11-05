@@ -1,7 +1,7 @@
 # Using nixos-bootstrap in your own installer
 
 This guide is for writing an installer, in any language, that installs NixOS hosts with nixos-bootstrap. To add
-nixos-bootstrap to a config and install a host by hand, or to see what the `bootstrap` output is, start with
+nixos-bootstrap to a config and install a host by hand, or to see what the `bootstrapEntries` output is, start with
 [README.md](README.md).
 
 Your installer drives the install and owns everything after the first boot. nixos-bootstrap gives it:
@@ -10,8 +10,8 @@ Your installer drives the install and owns everything after the first boot. nixo
 - the host's data as JSON, already checked;
 - a target it can log in to as root, with the tools it needs.
 
-The installer needs no knowledge of how a config is organised. The config only has to have the
-[`bootstrap` output](README.md#1-add-the-bootstrap-output). The examples are shell, but a program can run the same
+The installer needs no knowledge of how a config is organised. The config only has to
+[use nixos-bootstrap](README.md#1-add-nixos-bootstrap-to-your-config). The examples are shell, but a program can run the same
 commands.
 
 ## Inputs
@@ -24,19 +24,15 @@ An installer needs three things from its user:
 | The host | `myhost` |
 | The target's address | `192.0.2.10` |
 
-Everything else comes from nixos-bootstrap's outputs. Nix commands take the config with `--override-input`:
-
-```sh
-bootstrap=github:julian-kragt/nixos-bootstrap
-override=(--override-input config "$config")
-```
+Everything else comes from the outputs nixos-bootstrap adds to the config. Which version of nixos-bootstrap that is, the
+config's `flake.lock` decides.
 
 ## What you can read
 
 `installerData.<host>` is the only output meant to be parsed. For the example config in this repository:
 
 ```sh
-nix eval --json "$bootstrap#installerData.$host" "${override[@]}"
+nix eval --json "$config#installerData.$host"
 ```
 
 ```json
@@ -81,13 +77,13 @@ Run these first, so a broken entry or bootstrap system fails before anything hap
 
 ```sh
 # The hosts that can be installed. Use it to validate the host, or to let the user choose.
-nix eval --json "$bootstrap#installerData" "${override[@]}" --apply builtins.attrNames
+nix eval --json "$config#installerData" --apply builtins.attrNames
 
 # The entry's fields and the disks an install wipes.
-data=$(nix eval --json "$bootstrap#installerData.$host" "${override[@]}")
+data=$(nix eval --json "$config#installerData.$host")
 
 # The rest of the bootstrap system and NixOS's assertions, which installerData doesn't check.
-nix eval --raw "$bootstrap#nixosConfigurations.$host.config.system.build.toplevel.drvPath" "${override[@]}"
+nix eval --raw "$config#nixosConfigurations.$host-bootstrap.config.system.build.toplevel.drvPath"
 ```
 
 The evaluation only instantiates the system, so it works on macOS as well. The errors name the host and the field, and
@@ -109,24 +105,9 @@ can start. There are two ways to get the real one, described in
 
 ### 3. Run nixos-anywhere
 
-nixos-anywhere can't pass `--override-input`, so write a wrapper flake that sets the `config` input:
-
-```sh
-tmp=$(mktemp -d)
-cat > "$tmp/flake.nix" <<EOF
-{
-  inputs.nixos-bootstrap.url = "$bootstrap";
-  inputs.nixos-bootstrap.inputs.config.url = "$config";
-  outputs = { nixos-bootstrap, ... }: { inherit (nixos-bootstrap) nixosConfigurations; };
-}
-EOF
-```
-
-Then install with it:
-
 ```sh
 nix run github:nix-community/nixos-anywhere -- \
-  --flake "$tmp#$host" \
+  --flake "$config#$host-bootstrap" \
   --target-host "root@$target" \
   --build-on remote
 ```
@@ -134,8 +115,6 @@ nix run github:nix-community/nixos-anywhere -- \
 - The target must already accept root over SSH, as nixos-anywhere requires. Getting there, for example by installing a
   key with a password from the ISO, is up to your installer.
 - This wipes the disks in the layout, so ask for confirmation first, showing the disks from above.
-- Don't write a lock file for the wrapper. nixos-anywhere evaluates it without one, so every step reads the config as it
-  is then, including a newly generated hardware config.
 - `--build-on remote` builds on the target, for when the machine running the installer can't build for the target's
   system.
 - With `--generate-hardware-config`, add `--generate-hardware-config nixos-generate-config <hardwareConfigPath>` and run
@@ -185,9 +164,9 @@ nixos-rebuild switch --flake "$config#$host" \
 
 ## Rules for a robust installer
 
-- **Pin nixos-bootstrap** to a tag or commit, `github:julian-kragt/nixos-bootstrap/<tag or commit>`, so an install is
-  repeatable and the output format doesn't change underneath you.
-- **Read only nixos-bootstrap's outputs**, not the config's `bootstrap` output. Those are checked; the raw one isn't.
+- **Expect the version the config pins.** Its `flake.lock` decides, so an install is repeatable, and an older
+  version can have a different output format.
+- **Read `installerData`**, not the config's `bootstrapEntries` output. The first is checked; the raw one isn't.
 - **Remember that `git+file://` only sees tracked files.** A new, untracked hardware config looks like a missing one.
 - **Handle reinstalls.** A reinstall wipes the disk and generates a new host key, so the old `known_hosts` entry is wrong,
   and anything encrypted to the old key has to be encrypted to the new one before the full deploy.
@@ -205,28 +184,17 @@ on the machine that runs it.
 set -euo pipefail
 
 config=$1 host=$2 target=$3
-bootstrap=github:julian-kragt/nixos-bootstrap
-override=(--override-input config "$config")
 
 # 1. Check everything before touching a disk.
-disks=$(nix eval --json "$bootstrap#installerData.$host" "${override[@]}" --apply 'd: builtins.deepSeq d d.disks')
-nix eval --raw "$bootstrap#nixosConfigurations.$host.config.system.build.toplevel.drvPath" "${override[@]}" >/dev/null
+disks=$(nix eval --json "$config#installerData.$host" --apply 'd: builtins.deepSeq d d.disks')
+nix eval --raw "$config#nixosConfigurations.$host-bootstrap.config.system.build.toplevel.drvPath" >/dev/null
 
 read -r -p "Wipe $disks on $target? Type yes: " answer
 [ "$answer" = yes ] || exit 1
 
-# 3. Run nixos-anywhere through a wrapper flake.
-tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
-cat >"$tmp/flake.nix" <<EOF
-{
-  inputs.nixos-bootstrap.url = "$bootstrap";
-  inputs.nixos-bootstrap.inputs.config.url = "$config";
-  outputs = { nixos-bootstrap, ... }: { inherit (nixos-bootstrap) nixosConfigurations; };
-}
-EOF
+# 3. Run nixos-anywhere.
 nix run github:nix-community/nixos-anywhere -- \
-  --flake "$tmp#$host" --target-host "root@$target" --build-on remote
+  --flake "$config#$host-bootstrap" --target-host "root@$target" --build-on remote
 
 # 4. Wait for the reboot; the host key is new.
 ssh-keygen -R "$target" || true

@@ -1,5 +1,5 @@
 # The bootstrap system: root SSH access, the host's users and the tooling
-# installers need on the target. `entry` is the config's bootstrap.<host>,
+# installers need on the target. `entry` is the config's bootstrapEntries.<host>,
 # checked against entry-options.nix; nixos-configurations.nix adds the host's
 # disks and hardware config next to this module.
 {
