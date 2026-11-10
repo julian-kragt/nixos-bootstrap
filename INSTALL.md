@@ -94,7 +94,7 @@ are worth showing as they are. What they mean: [troubleshooting](README.md#troub
 Reading `installerData.<host>` and evaluating the system both fail if the file at `hardwareConfigPath` doesn't exist, so
 the path itself can't be read from `installerData` either. On a new host, the config needs a file before your installer
 can start. There are two ways to get the real one, described in
-[README step 3](README.md#3-generate-the-hardware-config):
+[README step 2](README.md#2-generate-the-hardware-config):
 
 - **Generate it first.** Run `nixos-generate-config --no-filesystems --show-hardware-config` on the booted target, and
   have the user add it to the config. This works with any config reference, but the path can't come from
@@ -196,7 +196,8 @@ read -r -p "Wipe $disks on $target? Type yes: " answer
 nix run github:nix-community/nixos-anywhere -- \
   --flake "$config#$host-bootstrap" --target-host "root@$target" --build-on remote
 
-# 4. Wait for the reboot; the host key is new.
+# 4. Wait for the reboot; the host key is new. This waits forever, for the passphrase of an
+# encrypted disk: "Permission denied" means your key isn't in rootAuthorizedKeys, so stop it.
 ssh-keygen -R "$target" || true
 ssh_opts=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=5)
 until ssh "${ssh_opts[@]}" "root@$target" true; do
@@ -204,7 +205,8 @@ until ssh "${ssh_opts[@]}" "root@$target" true; do
   sleep 5
 done
 
-# 5. Your own work goes here, such as writing secrets to this recipient.
+# 5. Your own work goes here, such as writing secrets to this recipient. A config with
+# sops-nix secrets fails step 6 until they are encrypted to it.
 recipient=$(ssh "root@$target" 'ssh-to-age < /etc/ssh/ssh_host_ed25519_key.pub')
 echo "Host recipient: $recipient"
 

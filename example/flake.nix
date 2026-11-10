@@ -78,7 +78,7 @@
       bootstrapEntries =
         nixpkgs.lib.mapAttrs
           (
-            host:
+            _:
             { config, ... }:
             {
               system = config.nixpkgs.hostPlatform.system;
