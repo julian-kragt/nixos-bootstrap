@@ -102,7 +102,7 @@ expect_error system-darwin "$not_type \`Linux platform" 's/system = config.nixpk
 expect_error keys-empty "example.rootAuthorizedKeys' $not_type" 's/rootAuthorizedKeys = .*/rootAuthorizedKeys = [ ];/'
 expect_error no-disks 'has no disks.' 's/diskoDevices = config.disko.devices;/diskoDevices = { };/'
 expect_error esp-elsewhere 'must mount the EFI system partition (vfat) at /boot' 's|mountpoint = "/boot";|mountpoint = "/boot/efi";|'
-expect_error input-renamed "without required argument 'disko'" 's/^    disko = {/    disko2 = {/; s/inputs\.disko\./inputs.disko2./'
+expect_error input-renamed 'the config flake has no `disko` input' 's/^    disko = {/    disko2 = {/; s/inputs\.disko\./inputs.disko2./'
 
 echo
 if [ "$failures" -gt 0 ]; then

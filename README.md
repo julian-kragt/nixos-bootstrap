@@ -341,7 +341,7 @@ keys of any kind.
 | ``A definition for option `bootstrapEntries.<host>.…' is not of type …`` | Wrong type. `users` takes `config.users.users` itself, not a list of names. `system` must be a Linux platform. `rootAuthorizedKeys` can't be empty. |
 | ``nixos-bootstrap: the disko layout of `<host>` has no disks.`` | `diskoDevices` defines no disks. Check that the entry passes the host's `config.disko.devices`. |
 | `nixos-bootstrap: the disko layout must mount the EFI system partition (vfat) at /boot.` | The bootstrap system's systemd-boot installs to `/boot`. Change the layout's ESP mountpoint. |
-| `called without required argument 'nixpkgs'` or `'disko'` | nixos-bootstrap uses your config's `nixpkgs` and `disko` inputs: your flake needs inputs with exactly those names. |
+| ``nixos-bootstrap: the config flake has no `disko` input`` (or `nixpkgs`) | nixos-bootstrap uses your config's `nixpkgs` and `disko` inputs: your flake needs inputs with exactly those names. |
 
 ### Repository layout
 
