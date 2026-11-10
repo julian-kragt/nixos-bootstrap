@@ -26,7 +26,7 @@
           ...
         }:
         let
-          lib = nixpkgs.lib;
+          inherit (nixpkgs) lib;
           configFlake = self;
           entries = import ./entries.nix { inherit lib configFlake; };
           nixosConfigurations = import ./nixos-configurations.nix {
