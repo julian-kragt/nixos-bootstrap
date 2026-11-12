@@ -137,7 +137,7 @@ stored, who they're encrypted to, or which keys exist, and it generates no user 
 
 - The host key. For sops-nix, this prints its age recipient:
   ```sh
-  ssh "root@$target" 'ssh-to-age < /etc/ssh/ssh_host_ed25519_key.pub'
+  ssh "root@$target" cat /etc/ssh/ssh_host_ed25519_key.pub | nix run nixpkgs#ssh-to-age
   ```
 - The users, which exist on the target with their home directories:
   ```sh
@@ -148,7 +148,7 @@ What the target provides:
 
 - Only root can log in, with one of `rootAuthorizedKeys`. The users have no password or keys, so run things as a user
   with `runuser -u <user> -- <command>` from root.
-- `git`, `sops`, `age`, `ssh-to-age` and `vim`.
+- `git`, `sops`, `age`, `vim` and `mkpasswd`.
 - nix with the `nix-command`, `flakes` and `pipe-operators` features, so the config can be evaluated on the target.
 - GitHub's SSH host key, so repositories can be cloned without a prompt, given credentials.
 
@@ -205,9 +205,8 @@ until ssh "${ssh_opts[@]}" "root@$target" true; do
   sleep 5
 done
 
-# 5. Your own work goes here, such as writing secrets to this recipient. A config with
-# sops-nix secrets fails step 6 until they are encrypted to it.
-recipient=$(ssh "root@$target" 'ssh-to-age < /etc/ssh/ssh_host_ed25519_key.pub')
+# 5. Your own work goes here, such as writing secrets to this recipient.
+recipient=$(ssh "root@$target" cat /etc/ssh/ssh_host_ed25519_key.pub | nix run nixpkgs#ssh-to-age)
 echo "Host recipient: $recipient"
 
 # 6. Deploy the full config.

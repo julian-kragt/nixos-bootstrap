@@ -255,10 +255,10 @@ If your config has secrets, write them now. How is up to you; the bootstrap syst
 
 - the host's SSH key, at `/etc/ssh/ssh_host_ed25519_key`. For sops-nix, this prints its age recipient:
   ```sh
-  ssh root@192.0.2.10 'ssh-to-age < /etc/ssh/ssh_host_ed25519_key.pub'
+  ssh root@192.0.2.10 cat /etc/ssh/ssh_host_ed25519_key.pub | nix run nixpkgs#ssh-to-age
   ```
 - the normal users from `users`, with their home directories, for anything per-user;
-- `sops`, `age`, `ssh-to-age` and `git` on the target.
+- `sops`, `age` and `git` on the target.
 
 Then deploy the full config over the bootstrap system:
 
@@ -305,7 +305,7 @@ What it contains:
   boot, no passwords, root login with a key from `rootAuthorizedKeys`;
 - the normal users from `users`, with the full config's `name`, `uid` and `home`, but without a password or keys, so
   their UIDs and home directories exist before the full config arrives;
-- `git`, `sops`, `age`, `ssh-to-age` and `vim`, nix with the `nix-command`, `flakes` and `pipe-operators` features,
+- `git`, `sops`, `age`, `vim` and `mkpasswd`, nix with the `nix-command`, `flakes` and `pipe-operators` features,
   and GitHub's SSH host key, so you can clone repositories and evaluate your config on the target.
 
 What it leaves to the full config: Home Manager, sops-nix, passwords, user SSH keys, services, and the host's own

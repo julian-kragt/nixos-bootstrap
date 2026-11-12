@@ -59,13 +59,14 @@
   };
 
   # What installers run on the target: they evaluate the config here and
-  # author secrets in a git repository (e.g. cloned from GitHub).
+  # author secrets in a git repository (e.g. cloned from GitHub). Secrets are
+  # typed at the console, so the password hashes are made here too (mkpasswd).
   environment.systemPackages = with pkgs; [
     git
     sops
     age
-    ssh-to-age
     vim
+    mkpasswd
   ];
 
   nix.settings.experimental-features = [
