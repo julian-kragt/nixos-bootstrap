@@ -19,14 +19,16 @@
       # `inputs` are the config flake's: nixpkgs and the disko that evaluated
       # its disko.devices, so this flake has no inputs of its own.
       outputsFor =
-        {
-          self,
-          nixpkgs,
-          disko,
-          ...
-        }:
+        inputs@{ self, ... }:
         let
-          lib = nixpkgs.lib;
+          # A throw, because some versions of nix report a missing function argument
+          # here as the flake not having the attribute the user asked for.
+          input =
+            name:
+            inputs.${name}
+              or (throw "nixos-bootstrap: the config flake has no `${name}` input (see README.md)");
+          inherit (input "nixpkgs") lib;
+          disko = input "disko";
           configFlake = self;
           entries = import ./entries.nix { inherit lib configFlake; };
           nixosConfigurations = import ./nixos-configurations.nix {

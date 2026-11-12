@@ -9,26 +9,41 @@ You never edit this repository. You add it to your config as an input and add on
 nixos-bootstrap generates the rest.
 
 This guide is for adding it to your nixos-config and installing a host by hand. To drive it from a script or program of
-your own, see [INSTALL.md](INSTALL.md).
+your own (an *installer*, in these docs), see [INSTALL.md](INSTALL.md).
 
 Examples use `myhost` as the host, `192.0.2.10` as the target and `~/nixos-config` as a local checkout of your config.
 
+## Status
+
+nixos-bootstrap is shared as it is, with no compatibility promises: its outputs, including `installerData`, can change.
+Your `flake.lock` pins the version you use, so read the changes before you update it.
+
+It evaluates with nixpkgs 24.11 through unstable, and has been installed on x86_64 UEFI hardware. Layouts with LUKS and
+`aarch64-linux` hosts evaluate, but haven't been installed yet.
+
 ## Why it exists
 
-A full NixOS config that uses [sops-nix](https://github.com/Mic92/sops-nix) can't be the first thing on a new host:
+A full NixOS config that uses [sops-nix](https://github.com/Mic92/sops-nix) depends on a key that a new host doesn't
+have yet:
 
-- sops-nix decrypts the host's secrets with a key derived from the host's SSH key. That key is generated on the
-  first boot, so before the install there is nothing to encrypt the secrets to.
+- sops-nix decrypts the host's secrets with a key derived from the host's SSH key, so the secrets have to be encrypted
+  to that key.
 - With `users.mutableUsers = false` and passwords from sops (`neededForUsers`), installing the full config before
   its secrets can be decrypted leaves every user without a login.
 
-So the host is installed in two steps: first a bootstrap system, which needs no secrets, then the full config once the
-host runs and has its host key. The bootstrap only has to boot and let you in, which is the same for every host, so
+The usual answer is to generate the host key in advance and copy it to the target with nixos-anywhere's
+[`--extra-files`](https://github.com/nix-community/nixos-anywhere/blob/main/docs/howtos/secrets.md). That works, and if
+you already manage host keys that way you don't need this project. It does mean each host's private key exists
+somewhere else first, and has to be generated, stored and transferred.
+
+With nixos-bootstrap, no private key is ever exchanged. The host is installed in two steps: first a bootstrap system,
+which needs no secrets and on which the host generates its own key, then the full config, once its secrets have been
+written directly on the target. The bootstrap only has to boot and let you in, which is the same for every host, so
 there is no hand-written `<host>-bootstrap` system to maintain. It can't drift from the host either, because the
 `bootstrapEntries` output takes its values from the host's evaluated full config.
 
 sops-nix is the typical reason, not a requirement. A config without such secrets doesn't strictly need a bootstrap step,
-but works the same way.
+but works the same way. The reasoning behind this and other choices is in [DESIGN.md](DESIGN.md).
 
 ## How it works
 
@@ -73,7 +88,8 @@ that output follows a fixed shape.
   with the EFI system partition at `/boot`.
 - The machine you install from has nix with flakes. It can be macOS: the target builds its own system.
 - The target is booted from a NixOS installer ISO (or another Linux nixos-anywhere can kexec from), reachable over
-  SSH as root.
+  SSH as root. The ISO has no root password, so first set one with `sudo passwd root` at its console, or add your key
+  to `/root/.ssh/authorized_keys`.
 - Your SSH key is in root's `openssh.authorizedKeys.keys` in the host's full config. That list becomes the bootstrap
   system's root keys.
 
@@ -148,13 +164,43 @@ Notes:
   as it is, along with disko's internal attributes. Plain data, the attrset you would write in
   `disko.devices = { … };`, works too. Disko's own options check the layout.
 - `hardwareConfigPath` must point to an existing file, so a host's hardware config is generated before its first
-  install (step 3). The bootstrap system imports that file without your config's `specialArgs`, modules or nixpkgs
+  install (step 2). The bootstrap system imports that file without your config's `specialArgs`, modules or nixpkgs
   settings, so it can only use standard NixOS options.
 - `users` is `config.users.users` itself, not a list of names. Each entry needs `isNormalUser`, `uid` and `home`; `name`
   defaults to the attribute's name. Its other options are ignored: passwords, keys and packages in it never reach the
   bootstrap system or `installerData`.
 
-## 2. Check the entry
+## 2. Generate the hardware config
+
+`hardwareConfigPath` must point to an existing file before nixos-bootstrap evaluates. On a host that has never been
+installed, create it in one of two ways.
+
+**a. Before the install, from the booted ISO.** This works with any config reference:
+
+```sh
+ssh root@192.0.2.10 nixos-generate-config --no-filesystems --show-hardware-config \
+  > hosts/myhost/hardware-configuration.nix
+git add hosts/myhost/hardware-configuration.nix
+```
+
+Commit and push it too if you install from a pushed config.
+
+**b. In the same nixos-anywhere run**, with `--generate-hardware-config` (step 4). nixos-anywhere writes the file once it
+has reached the target, kexec included if it needs one, then runs `git add --intent-to-add` on it, and only then
+evaluates the flake. This needs a local checkout of the config, the path inside that checkout, and `git` on your PATH.
+
+The checks in step 3 still need a file until then, so first commit a stub at `hardwareConfigPath`; nixos-anywhere
+overwrites it. The stub sets the host's platform, because a real hardware config usually does and the
+`bootstrapEntries` output reads it:
+
+```nix
+{ nixpkgs.hostPlatform = "x86_64-linux"; }
+```
+
+`--no-filesystems` matters: disko defines the filesystems, and a hardware config that defines them too conflicts
+with it.
+
+## 3. Check the entry
 
 From your config, this reads the checked entry:
 
@@ -178,38 +224,6 @@ nix eval --json .#installerData --apply builtins.attrNames
 
 In a git checkout, nix only sees files git tracks, so `git add` new files first.
 
-On a new host the first two checks fail until the hardware config exists, which is the next step.
-
-## 3. Generate the hardware config
-
-`hardwareConfigPath` must point to an existing file before nixos-bootstrap evaluates. On a host that has never been
-installed, create it in one of two ways.
-
-**a. Before the install, from the booted ISO.** This works with any config reference:
-
-```sh
-ssh root@192.0.2.10 nixos-generate-config --no-filesystems --show-hardware-config \
-  > hosts/myhost/hardware-configuration.nix
-git add hosts/myhost/hardware-configuration.nix
-```
-
-Commit and push it too if you install from a pushed config.
-
-**b. In the same nixos-anywhere run**, with `--generate-hardware-config` (step 4). nixos-anywhere writes the file after it
-has booted its installer on the target, then runs `git add --intent-to-add` on it, and only then evaluates the flake.
-This needs a local checkout of the config, the path inside that checkout, and `git` on your PATH.
-
-The checks in step 2 still need a file until then, so first commit a stub at `hardwareConfigPath`; nixos-anywhere
-overwrites it. The stub sets the host's platform, because a real hardware config usually does and the
-`bootstrapEntries` output reads it:
-
-```nix
-{ nixpkgs.hostPlatform = "x86_64-linux"; }
-```
-
-`--no-filesystems` matters: disko defines the filesystems, and a hardware config that defines them too conflicts
-with it.
-
 ## 4. Install with nixos-anywhere
 
 This wipes the disks in your disko layout.
@@ -223,7 +237,7 @@ nix run github:nix-community/nixos-anywhere -- \
   --generate-hardware-config nixos-generate-config hosts/myhost/hardware-configuration.nix
 ```
 
-- Leave out `--generate-hardware-config` if you generated the file in step 3a.
+- Leave out `--generate-hardware-config` if you generated the file in step 2a.
 - `--build-on remote` builds on the target. Use it when your machine can't build for the target's system, such as
   from macOS.
 - If the disk layout uses LUKS with a `passwordFile` (for example `/tmp/disko-password`), send the passphrase with
@@ -253,8 +267,8 @@ nixos-rebuild switch --flake ~/nixos-config#myhost \
   --target-host root@192.0.2.10 --build-host root@192.0.2.10
 ```
 
-If your machine has no `nixos-rebuild` and your config is pushed, run it on the target instead, which needs access to
-your repository from there:
+If your machine has no `nixos-rebuild`, such as on macOS, `nix shell nixpkgs#nixos-rebuild-ng` provides it. If your
+config is pushed, you can also run it on the target instead, which needs access to your repository from there:
 
 ```sh
 ssh root@192.0.2.10 nixos-rebuild switch --flake github:you/nixos-config#myhost
@@ -279,6 +293,8 @@ They give your config these outputs, one of each for every host in `bootstrapEnt
 | `nixosConfigurations.<host>-bootstrap` | the bootstrap system for `<host>`, with `<host>` as its hostname; this is what nixos-anywhere installs |
 | `installerData.<host>` | `bootstrapEntries.<host>`, checked, with `disks` in place of `diskoDevices`, as JSON-safe data for installers ([INSTALL.md](INSTALL.md#what-you-can-read)) |
 
+`nix flake check` warns about an `unknown flake output` for `bootstrapEntries` and `installerData`. That's harmless.
+
 ### The bootstrap system
 
 What it contains:
@@ -302,6 +318,8 @@ keys of any kind.
   with any other layout. BIOS boot isn't supported.
 - Only root can log in to the bootstrap system.
 - A user's primary group isn't carried over from the full config.
+- `hardwareConfigPath` has to be a NixOS module, so `--generate-hardware-config nixos-facter`, which writes JSON, doesn't
+  work.
 - Static networking and ZFS's `networking.hostId` aren't carried over. A host that needs them can set them in a
   hand-written hardware config, but `--generate-hardware-config` overwrites that file.
 - With a LUKS-encrypted disk, someone types the passphrase at the console on every boot of the bootstrap system: it
@@ -317,13 +335,13 @@ keys of any kind.
 | `infinite recursion encountered` | `bootstrapEntries` takes its host names from `self.nixosConfigurations`. Name the hosts instead (step 1). |
 | ``The option `bootstrapEntries.<host>.<field>' was accessed but has no value defined`` | The field is missing. All five are required. |
 | ``The option `bootstrapEntries.<host>.<field>' does not exist`` | Only the five fields are allowed. |
-| ``A definition for option `bootstrapEntries.<host>.hardwareConfigPath' is not of type `path of an existing file, …'`` | Generate the file (step 3). In a git checkout, untracked files are invisible: `git add` it. The path must be relative to the root of your config. |
-| `path '…/hardware-configuration.nix' does not exist` | Your full config imports a hardware config that isn't there yet. Generate the file (step 3). |
-| `Path '…' in the repository "…" is not tracked by Git` | In a git checkout, untracked files are invisible: `git add` the file. |
+| ``A definition for option `bootstrapEntries.<host>.hardwareConfigPath' is not of type `path of an existing file, …'`` | Generate the file (step 2). In a git checkout, untracked files are invisible: `git add` it. The path must be relative to the root of your config. |
+| `Path '…' does not exist in Git repository "…"` | Seen when evaluating the full config, or a field read from it: it imports a hardware config that isn't there yet. Generate the file (step 2). |
+| `Path '…' in the repository "…" is not tracked by Git` | Seen when evaluating the full config, or a field read from it. In a git checkout, untracked files are invisible: `git add` the file. |
 | ``A definition for option `bootstrapEntries.<host>.…' is not of type …`` | Wrong type. `users` takes `config.users.users` itself, not a list of names. `system` must be a Linux platform. `rootAuthorizedKeys` can't be empty. |
 | ``nixos-bootstrap: the disko layout of `<host>` has no disks.`` | `diskoDevices` defines no disks. Check that the entry passes the host's `config.disko.devices`. |
 | `nixos-bootstrap: the disko layout must mount the EFI system partition (vfat) at /boot.` | The bootstrap system's systemd-boot installs to `/boot`. Change the layout's ESP mountpoint. |
-| `called without required argument 'nixpkgs'` or `'disko'` | nixos-bootstrap uses your config's `nixpkgs` and `disko` inputs: your flake needs inputs with exactly those names. |
+| ``nixos-bootstrap: the config flake has no `disko` input`` (or `nixpkgs`) | nixos-bootstrap uses your config's `nixpkgs` and `disko` inputs: your flake needs inputs with exactly those names. |
 
 ### Repository layout
 
@@ -336,12 +354,20 @@ nixos-configurations.nix          builds the bootstrap systems
 bootstrap.nix                     the bootstrap system's NixOS module
 example/flake.nix                 a plain flake using nixos-bootstrap: one QEMU host and its entry
 example/hardware-configuration.nix
+tests/                            the checks CI runs: errors, the example and a flake-parts config
+DESIGN.md                         why it works the way it does
 ```
 
 To try it with the example config, from a checkout of this repository:
 
 ```sh
 cd example
-nix eval --json .#installerData.example --no-write-lock-file
-nix eval --raw .#nixosConfigurations.example-bootstrap.config.system.build.toplevel.drvPath --no-write-lock-file
+nix eval --json .#installerData.example
+nix eval --raw .#nixosConfigurations.example-bootstrap.config.system.build.toplevel.drvPath
 ```
+
+To run the tests, which need nix with flakes: `tests/run.sh`.
+
+## License
+
+[MIT](LICENSE).

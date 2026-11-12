@@ -18,7 +18,10 @@ in
 {
   options = {
     system = mkOption {
-      type = types.enum lib.platforms.linux;
+      # Not types.enum, whose error would list every Linux platform.
+      type = types.addCheck types.str (s: lib.elem s lib.platforms.linux) // {
+        description = ''Linux platform, such as "x86_64-linux"'';
+      };
       description = ''The host's platform, such as "x86_64-linux".'';
     };
 

@@ -17,6 +17,8 @@ lib.mapAttrs (
     users = lib.mapAttrs (_: u: { inherit (u) name uid home; }) (
       lib.filterAttrs (_: u: u.isNormalUser) entry.users
     );
-    disks = lib.throwIf (disks == { }) "nixos-bootstrap: the disko layout of `${host}` has no disks." disks;
+    disks = lib.throwIf (
+      disks == { }
+    ) "nixos-bootstrap: the disko layout of `${host}` has no disks." disks;
   }
 ) entries
