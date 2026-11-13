@@ -274,6 +274,90 @@ config is pushed, you can also run it on the target instead, which needs access 
 ssh root@192.0.2.10 nixos-rebuild switch --flake github:you/nixos-config#myhost
 ```
 
+## Optional: describe your secrets repository
+
+If your secrets are in a repository of their own, such as one that sops-nix reads, nixos-bootstrap can check its layout
+too. Your config and installers then read the file paths from that repository instead of hard-coding them. Neither
+nixos-bootstrap nor its bootstrap system needs this; it is only a shared contract.
+
+Add a `secretsEntry` output to the secrets repository's flake, next to the data for installers. Like
+`bootstrapEntries` in your config, nixos-bootstrap reads it from the flake and checks it:
+
+```nix
+# flake.nix of the secrets repository
+inputs = {
+  nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  nixos-bootstrap.url = "github:julian-kragt/nixos-bootstrap";
+};
+
+outputs = inputs@{ nixos-bootstrap, ... }: {
+  # The checked layout, for installers.
+  installerSecretsData = nixos-bootstrap.lib.secretsInstallerData inputs;
+
+  secretsEntry = {
+    userMode = "per-host";            # "per-host", "shared" or "both"
+    hostPath = "hosts";
+    hostUserPath = "host-users";      # null when userMode = "shared"
+    sharedUserPath = null;            # null when userMode = "per-host"
+    hostTemplatePath = "templates/host.yaml";
+    hostUserTemplatePath = "templates/user.yaml";  # null when userMode = "shared"
+    sharedUserTemplatePath = null;                 # null when userMode = "per-host"
+  };
+};
+```
+
+It describes these files:
+
+| File | Path | Exists when `userMode` is |
+|---|---|---|
+| a host's own secrets | `<hostPath>/<host>.yaml` | any |
+| a user's secrets on one host | `<hostUserPath>/<host>-<user>.yaml` | `per-host`, `both` |
+| a user's secrets on every host they are on | `<sharedUserPath>/<user>.yaml` | `shared`, `both` |
+
+Rules, checked as module options (`secrets-entry-options.nix`) and in `secrets.nix`:
+
+- Every field must be given; any other field is an error.
+- Paths are relative to the repository, without `.`, `..` or empty segments, and must exist. A directory that holds no
+  files yet needs a placeholder, such as `.gitkeep`, to exist in git.
+- `hostUserPath` and `hostUserTemplatePath` are set exactly when `userMode` is `per-host` or `both`.
+  `sharedUserPath` and `sharedUserTemplatePath` are set exactly when it is `shared` or `both`. The others are `null`.
+- The directories are different, and none of them is inside another. No template is inside one of them.
+- The login password is the top-level `hashedPassword` of the user template that has it. Only one user template may
+  have one; with neither, users have no password file.
+
+In your config, take the secrets repository as a flake input, here named `secrets`, using your config's `nixpkgs` and
+nixos-bootstrap:
+
+```nix
+inputs.secrets = {
+  url = "git+ssh://git@example.com/you/secrets.git";
+  inputs.nixpkgs.follows = "nixpkgs";
+  inputs.nixos-bootstrap.follows = "nixos-bootstrap";
+};
+```
+
+and read the paths from `lib.secretsLayout`:
+
+```nix
+let
+  layout = inputs.nixos-bootstrap.lib.secretsLayout { inherit lib; secretsFlake = inputs.secrets; };
+in
+{
+  sops.defaultSopsFile = "${inputs.secrets}/${layout.hostFile "myhost"}";
+}
+```
+
+| Function | Returns |
+|---|---|
+| `hostFile host` | the host's own file |
+| `hostUserFile host user` | the user's file on that host, or `null` without one |
+| `sharedUserFile user` | the user's shared file, or `null` without one |
+| `homeFile host user` | the user's default file for Home Manager: the shared one if there is one, else the one on the host |
+| `passwordFile host user` | the file that holds the user's `hashedPassword`, or `null` |
+
+The result also has the entry's fields and `passwordTemplate`. Every field is checked when the layout is first used, so
+a broken entry stops evaluation even if a function is never called.
+
 ## Reference
 
 ### Outputs
@@ -285,6 +369,8 @@ nixos-bootstrap provides these, for your config to use:
 | `lib.systems inputs` | the bootstrap systems, as `<host>-bootstrap` |
 | `lib.installerData inputs` | the data for installers, by `<host>` |
 | `flakeModules.default` | a flake-parts module that adds both to your flake |
+| `lib.secretsLayout { lib, secretsFlake }` | a secrets repository's checked layout and file paths ([above](#optional-describe-your-secrets-repository)) |
+| `lib.secretsInstallerData inputs` | the same layout as JSON-safe data, for the secrets repository's `installerSecretsData` output |
 
 They give your config these outputs, one of each for every host in `bootstrapEntries`:
 
@@ -342,6 +428,9 @@ keys of any kind.
 | ``nixos-bootstrap: the disko layout of `<host>` has no disks.`` | `diskoDevices` defines no disks. Check that the entry passes the host's `config.disko.devices`. |
 | `nixos-bootstrap: the disko layout must mount the EFI system partition (vfat) at /boot.` | The bootstrap system's systemd-boot installs to `/boot`. Change the layout's ESP mountpoint. |
 | ``nixos-bootstrap: the config flake has no `disko` input`` (or `nixpkgs`) | nixos-bootstrap uses your config's `nixpkgs` and `disko` inputs: your flake needs inputs with exactly those names. |
+| ``nixos-bootstrap: the secrets flake has no `secretsEntry` output`` | Add it to the secrets repository's `flake.nix` ([above](#optional-describe-your-secrets-repository)). |
+| ``The option `secretsEntry.<field>' …`` | A field of `secretsEntry` is missing, unknown or of the wrong type. A path that isn't of type `path of an existing directory` or `file` is absolute, has `.` or `..`, or doesn't exist (in git: `git add` it). |
+| `nixos-bootstrap: secretsEntry: …` | A rule between fields is broken: a path set or left `null` against `userMode`, directories inside each other, a template inside one, or `hashedPassword` in both user templates. |
 
 ### Repository layout
 
@@ -352,9 +441,11 @@ entry-options.nix                 an entry's fields, as module options
 installer-data.nix                builds `installerData`
 nixos-configurations.nix          builds the bootstrap systems
 bootstrap.nix                     the bootstrap system's NixOS module
+secrets.nix                       a secrets flake's secretsEntry, checked, with its file paths
+secrets-entry-options.nix         that entry's fields, as module options
 example/flake.nix                 a plain flake using nixos-bootstrap: one QEMU host and its entry
 example/hardware-configuration.nix
-tests/                            the checks CI runs: errors, the example and a flake-parts config
+tests/                            the checks CI runs: errors, the example, a flake-parts config and a secrets repository
 DESIGN.md                         why it works the way it does
 ```
 

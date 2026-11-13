@@ -143,6 +143,29 @@ stored, who they're encrypted to, or which keys exist, and it generates no user 
   ```sh
   jq -r '.users[].name' <<<"$data"
   ```
+- If the secrets repository [describes its layout](README.md#optional-describe-your-secrets-repository), where its
+  files go, checked:
+  ```sh
+  nix eval --json "$secrets#installerSecretsData"
+  ```
+  ```json
+  {
+    "hostPath": "hosts",
+    "hostTemplatePath": "templates/host.yaml",
+    "hostUserPath": "host-users",
+    "hostUserTemplatePath": "templates/user.yaml",
+    "passwordTemplate": "templates/user.yaml",
+    "sharedUserPath": null,
+    "sharedUserTemplatePath": null,
+    "userMode": "per-host"
+  }
+  ```
+  A host's file is `<hostPath>/<host>.yaml`. A user's file on one host is `<hostUserPath>/<host>-<user>.yaml`
+  (`userMode` `per-host` or `both`), and a user's file for every host is `<sharedUserPath>/<user>.yaml` (`shared` or
+  `both`). A field that doesn't apply to the mode is `null`. `passwordTemplate` is the user template whose files hold
+  the login password, as a top-level `hashedPassword`, or `null`. A shared file is encrypted to every host its user is
+  on, so adding a host to it means re-encrypting it where an existing recipient's key is, never on the installer's
+  machine.
 
 What the target provides:
 
@@ -166,7 +189,8 @@ nixos-rebuild switch --flake "$config#$host" \
 
 - **Expect the version the config pins.** Its `flake.lock` decides, so an install is repeatable, and an older
   version can have a different output format.
-- **Read `installerData`**, not the config's `bootstrapEntries` output. The first is checked; the raw one isn't.
+- **Read `installerData`**, not the config's `bootstrapEntries` output. The first is checked; the raw one isn't. The
+  same goes for `installerSecretsData` and the secrets repository's `secretsEntry` output.
 - **Remember that `git+file://` only sees tracked files.** A new, untracked hardware config looks like a missing one.
 - **Handle reinstalls.** A reinstall wipes the disk and generates a new host key, so the old `known_hosts` entry is wrong,
   and anything encrypted to the old key has to be encrypted to the new one before the full deploy.

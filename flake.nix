@@ -10,6 +10,11 @@
 #
 #   nixosConfigurations.<host>-bootstrap  the bootstrap system for <host>
 #   installerData.<host>                  bootstrapEntries.<host> checked, with disks in place of diskoDevices, JSON-safe for installers
+#
+# A secrets repository describes its layout the same way, as its flake's `secretsEntry`
+# output (checked against secrets-entry-options.nix): lib.secretsLayout gives configs its
+# file paths, and lib.secretsInstallerData gives installers the data, as the repository's
+# `installerSecretsData` output.
 {
   description = "nixos-bootstrap: the first, minimal NixOS install of a host, driven by its config's bootstrapEntries output";
 
@@ -49,6 +54,26 @@
       lib = {
         systems = inputs: (outputsFor inputs).systems;
         installerData = inputs: (outputsFor inputs).installerData;
+
+        # A secrets repository's layout, from its flake's `secretsEntry` output (contract:
+        # README.md, checked against secrets-entry-options.nix). `secretsFlake` is that
+        # flake, such as a config's input; the result has the checked fields and the path
+        # of each kind of secret file.
+        secretsLayout = { lib, secretsFlake }: (import ./secrets.nix { inherit lib secretsFlake; }).layout;
+
+        # The same layout as JSON-safe data, for the secrets repository's own flake to
+        # output as `installerSecretsData`: `inputs` are that flake's, with `nixpkgs`.
+        secretsInstallerData =
+          inputs@{ self, ... }:
+          (import ./secrets.nix {
+            inherit
+              (inputs.nixpkgs
+                or (throw "nixos-bootstrap: the secrets flake has no `nixpkgs` input (see README.md)")
+              )
+              lib
+              ;
+            secretsFlake = self;
+          }).data;
       };
 
       # For flake-parts configs: adds both outputs to the flake.

@@ -104,6 +104,65 @@ expect_error no-disks 'has no disks.' 's/diskoDevices = config.disko.devices;/di
 expect_error esp-elsewhere 'must mount the EFI system partition (vfat) at /boot' 's|mountpoint = "/boot";|mountpoint = "/boot/efi";|'
 expect_error input-renamed 'the config flake has no `disko` input' 's/^    disko = {/    disko2 = {/; s/inputs\.disko\./inputs.disko2./'
 
+# The secrets layout: tests/secrets is a secrets repository with both kinds of user file.
+# It has no lock file: it gets the example's nixpkgs and this checkout.
+nixpkgs_ref=$(nix flake metadata --json "$root/example" |
+  tool jq -r '.locks.nodes.nixpkgs.locked | "github:\(.owner)/\(.repo)/\(.rev)"')
+
+secrets_eval() {
+  nix eval --quiet --no-write-lock-file --override-input nixos-bootstrap "path:$root" \
+    --override-input nixpkgs "$nixpkgs_ref" "$@"
+}
+
+# name, text the output must contain, sed script for the flake's secretsEntry, and a
+# command run in the copy before evaluating
+expect_secrets() {
+  local name=secrets-$1 expected=$2 edit=$3 setup=${4:-true} dir output
+  dir=$(copy tests/secrets "$name")
+  sed -e "$edit" "$root/tests/secrets/flake.nix" >"$dir/flake.nix"
+  output=$(cd "$dir" && eval "$setup" && {
+    secrets_eval --json .#installerSecretsData 2>&1 || true
+    secrets_eval --json .#paths 2>&1 || true
+  })
+  if grep -qF -- "$expected" <<<"$output"; then
+    pass "$name"
+  else
+    fail "$name" "$output"
+  fi
+}
+
+per_host='s/"both"/"per-host"/; s|sharedUserPath = .*|sharedUserPath = null;|; s|sharedUserTemplatePath = .*|sharedUserTemplatePath = null;|'
+shared='s/"both"/"shared"/; s|hostUserPath = .*|hostUserPath = null;|; s|hostUserTemplatePath = .*|hostUserTemplatePath = null;|'
+shared_password='echo "hashedPassword: CHANGEME" >>templates/shared-user.yaml'
+
+expect_secrets both-data '"passwordTemplate":"templates/user.yaml","sharedUserPath":"users"' ''
+expect_secrets both '{"home":"users/u.yaml","host":"hosts/h.yaml","hostUser":"host-users/h-u.yaml","password":"host-users/h-u.yaml","sharedUser":"users/u.yaml"}' ''
+expect_secrets both-shared-password '"password":"users/u.yaml"' '' \
+  "echo 'token: CHANGEME' >templates/user.yaml && $shared_password"
+expect_secrets no-password '"password":null' '' "echo 'token: CHANGEME' >templates/user.yaml"
+expect_secrets per-host '{"home":"host-users/h-u.yaml","host":"hosts/h.yaml","hostUser":"host-users/h-u.yaml","password":"host-users/h-u.yaml","sharedUser":null}' "$per_host"
+expect_secrets shared '{"home":"users/u.yaml","host":"hosts/h.yaml","hostUser":null,"password":"users/u.yaml","sharedUser":"users/u.yaml"}' "$shared" "$shared_password"
+
+dir_type="$not_type \`path of an existing directory"
+expect_secrets no-entry 'has no `secretsEntry` output' '/secretsEntry = {/,/^      };/d'
+expect_secrets missing-field "secretsEntry.hostPath' $no_value" '/hostPath = /d'
+expect_secrets unknown-field "secretsEntry.extra' does not exist" 's/userMode = "both";/& extra = 1;/'
+expect_secrets bad-mode "secretsEntry.userMode' $not_type" 's/"both"/"all"/'
+expect_secrets path-absolute "$dir_type" 's|hostPath = .*|hostPath = "/etc";|'
+expect_secrets path-parent "$dir_type" 's|hostPath = .*|hostPath = "../hosts";|'
+expect_secrets path-dot "$dir_type" 's|hostPath = .*|hostPath = "./hosts";|'
+expect_secrets path-missing "$dir_type" 's|hostPath = .*|hostPath = "nope";|'
+expect_secrets template-missing "$not_type \`path of an existing file" 's|hostTemplatePath = .*|hostTemplatePath = "templates/nope.yaml";|'
+expect_secrets path-unused '`sharedUserPath` must be null when userMode is "per-host"' 's/"both"/"per-host"/'
+expect_secrets path-required '`hostUserPath` is required when userMode is "both"' 's|hostUserPath = .*|hostUserPath = null;|'
+expect_secrets template-required '`sharedUserTemplatePath` is required when userMode is "shared"' \
+  's/"both"/"shared"/; s|hostUserPath = .*|hostUserPath = null;|; s|hostUserTemplatePath = .*|hostUserTemplatePath = null;|; s|sharedUserTemplatePath = .*|sharedUserTemplatePath = null;|'
+expect_secrets paths-equal 'the directories `host-users` and `host-users` must be different' 's|sharedUserPath = .*|sharedUserPath = "host-users";|'
+expect_secrets paths-nested 'the directories `hosts` and `hosts/sub` must be different' 's|sharedUserPath = .*|sharedUserPath = "hosts/sub";|' 'mkdir hosts/sub'
+expect_secrets template-inside 'templates must not be inside' 's|hostTemplatePath = .*|hostTemplatePath = "hosts/template.yaml";|' \
+  'cp templates/host.yaml hosts/template.yaml'
+expect_secrets password-twice 'only one of hostUserTemplatePath and sharedUserTemplatePath' '' "$shared_password"
+
 echo
 if [ "$failures" -gt 0 ]; then
   echo "$failures failed"
